@@ -102,43 +102,6 @@ __global__ void vector_add(bool* d_cgl_grid, bool* d_cgl_grid_next, int* rows, i
 
 }
 
-/**
- * createQuota - Batches current generations grid and stores the indices in `quotas` vector
- *
- * @num_of_threads: Number of threads that was requested to be spawned
- * 
- * @cgl_grid: Grid that holds the current generation status
- */
-
-void createQuota(int num_of_threads, std::vector<std::vector<int>>* cgl_grid)
-{
-    std::vector<std::vector<int>> threadQuota;
-    int batchSize = (ROWS * COLS) / NUMBER_OF_THREADS;
-
-    for (int iRow = 1; iRow < (*cgl_grid).size()-1; iRow++)
-    {
-        for (int iCol = 1; iCol < (*cgl_grid)[0].size()-1; iCol++)
-        {
-            std::vector<int> rowColIdx;
-
-            rowColIdx.push_back(iRow);
-            rowColIdx.push_back(iCol);
-
-            if (threadQuota.size() == batchSize)
-            {
-                quotas.push_back(std::move(threadQuota));
-                threadQuota.resize(0);
-            }
-
-            threadQuota.push_back(std::move(rowColIdx));
-        }
-    }
-    if (threadQuota.size() > 0)
-    {
-        quotas.push_back(std::move(threadQuota));
-    }
-}
-
 int main(int argc, char* argv[])
 {
     rng.seed(time(NULL));
@@ -274,32 +237,6 @@ int main(int argc, char* argv[])
             cgl_grid_next[i][j] = 0;
         }
     }
-    // // +2 for row and cols to have a boundry of 0s
-    // for (int i_row=0; i_row < ROWS+2; i_row++)
-    // {
-    //     std::vector<int> cgl_grid_row;
-    //     std::vector<int> cgl_grid_row_next;
-    //     for (int i_col=0; i_col < COLS+2; i_col++)
-    //     {
-    //         int val = bw(rng);
-    //         // std::cout << val;
-    //         cgl_grid_row.push_back(val);
-    //         cgl_grid_row_next.push_back(0);
-    //     }
-    //     cgl_grid.push_back(cgl_grid_row);
-    //     cgl_grid_next.push_back(cgl_grid_row);
-    //     // std::cout << std::endl;
-    // }
-    // for (int i = 0; i < COLS+2; i++) 
-    // {
-    //     cgl_grid[0][i] = 0;
-    //     cgl_grid[ROWS+1][i] = 0;
-    // }
-    // for (int i = 0; i < ROWS+2; i++)
-    // {
-    //     cgl_grid[i][0] = 0;
-    //     cgl_grid[i][COLS+1] = 0;
-    // }
 
     bool *d_cgl_grid, *d_cgl_grid_next;
     cudaMalloc((void**)&d_cgl_grid, sizeof(bool) * (ROWS + 2) * (COLS + 2));
@@ -313,16 +250,15 @@ int main(int argc, char* argv[])
     int rowsWithPadding, colsWithPadding;
     rowsWithPadding = ROWS + 2;
     colsWithPadding = COLS + 2;
+    printf("Rowswp: %d, Colswp: %d\n", rowsWithPadding, colsWithPadding);
 
     cudaMalloc((void**)&d_ROWS, sizeof(int));
     cudaMalloc((void**)&d_COLS, sizeof(int));
     cudaMemcpy(d_ROWS, &rowsWithPadding, sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_COLS, &colsWithPadding, sizeof(int), cudaMemcpyHostToDevice);
 
-    // if (PROCESS == 1)
-    // {
-    //     // createQuota(NUMBER_OF_THREADS, &cgl_grid);
-    // }
+    dim3 blockSize = ceil(rowsWithPadding * colsWithPadding / NUMBER_OF_THREADS);
+    printf("Blocksize: %d\n", blockSize);
 
     sf::Clock Clock;
     Clock.restart();
@@ -359,11 +295,11 @@ int main(int argc, char* argv[])
             Time = 0;
         }
 
-
-        vector_add<<<(dim3)rowsWithPadding, (dim3)colsWithPadding>>>(d_cgl_grid, d_cgl_grid_next, d_ROWS, d_COLS);
+        Clock.restart();
+        vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(d_cgl_grid, d_cgl_grid_next, d_ROWS, d_COLS);
         cudaMemcpy(cgl_grid_next[0], d_cgl_grid_next, sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyDeviceToHost);
         cudaMemcpy(d_cgl_grid, cgl_grid_next[0], sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyHostToDevice);
-        // Clock.restart();
+
         // switch (PROCESS)
         // {
         // case 0:
