@@ -8,7 +8,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CUDA_STANDARD 11)
 
 # Project name
-project(cuda_sfml_app LANGUAGES CXX CUDA)
+project(Lab4 LANGUAGES CXX CUDA)
+
+#find OPENMP
+find_package(OpenMP)
 
 # Include SFML
 include_directories(${PROJECT_SOURCE_DIR}/../SFML/include)
