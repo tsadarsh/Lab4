@@ -18,6 +18,7 @@ on the input parameters.
 #include "OMPLogic.cpp"
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include<unistd.h>
 
 int WINDOW_WIDTH = 800;
 int WINDOW_HEIGHT = 600;
@@ -36,7 +37,7 @@ struct Report
     std::string processName;
 };
 
-__global__ void vector_add(bool* d_cgl_grid, bool* d_cgl_grid_next, int* rows, int* cols)
+__global__ void vector_add(bool* input, bool* output, int* rows, int* cols)
 {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int r = tid / *cols;
@@ -66,38 +67,34 @@ __global__ void vector_add(bool* d_cgl_grid, bool* d_cgl_grid_next, int* rows, i
     bm_c = c;
     br_c = c + 1;
 
-    tl = d_cgl_grid[tl_r * (*cols) + tl_c];
-    tm = d_cgl_grid[tm_r * (*cols) + tm_c];
-    tr = d_cgl_grid[tr_r * (*cols) + tr_c];
-    ml = d_cgl_grid[ml_r * (*cols) + ml_c];
-    mr = d_cgl_grid[mr_r * (*cols) + mr_c];
-    bl = d_cgl_grid[bl_r * (*cols) + bl_c];
-    bm = d_cgl_grid[bm_r * (*cols) + bm_c];
-    br = d_cgl_grid[br_r * (*cols) + br_c];
+    tl = input[tl_r * (*cols) + tl_c];
+    tm = input[tm_r * (*cols) + tm_c];
+    tr = input[tr_r * (*cols) + tr_c];
+    ml = input[ml_r * (*cols) + ml_c];
+    mr = input[mr_r * (*cols) + mr_c];
+    bl = input[bl_r * (*cols) + bl_c];
+    bm = input[bm_r * (*cols) + bm_c];
+    br = input[br_r * (*cols) + br_c];
 
     int nearby_score = tl + tm + tr + ml + mr + bl + bm + br;
     
-    if (d_cgl_grid[cc] == 0)
+    if (input[cc] == 0)
     {
         if( nearby_score == 3)
-            d_cgl_grid_next[cc] = 1;
+            output[cc] = 1;
+        else
+            output[cc] = 0;
     }
 
     // alive cell: check death by isolation, death by overcrowding, or survival
     else 
     {
-        // death by isolation
-        if (nearby_score <= 1)
-            d_cgl_grid_next[cc] = 0;
+        // stay alive
+        if (nearby_score == 2 | nearby_score == 3)
+            output[cc] = 1;
         
-        // death by overpopulation
-        else if ( nearby_score >= 4)
-            d_cgl_grid_next[cc] = 0;
-        
-        else{
-            // cell survives, so do nothing
-            d_cgl_grid_next[cc] = 1;
-        }
+        else
+            output[cc] = 0;
     }
 
 }
@@ -196,10 +193,7 @@ int main(int argc, char* argv[])
         cells.push_back(cells_row);
     }
 
-    // std::vector<std::vector<int>> cgl_grid;
-    // std::vector<std::vector<int>> cgl_grid_next;
-
-    bool** cgl_grid;
+    bool** cgl_grid, **out_buff;
     switch (PROCESS)
     {
     case 0:
@@ -209,6 +203,12 @@ int main(int argc, char* argv[])
     case 1:
         cudaMallocHost((void**)&cgl_grid, (ROWS + 2) * sizeof(bool*));
         cudaMallocHost((void**)&cgl_grid[0], (ROWS + 2) * (COLS + 2) * sizeof(bool));
+        break;
+    case 2:
+        cudaMallocManaged(&cgl_grid, (ROWS + 2) * sizeof(bool*));
+        cudaMallocManaged(&cgl_grid[0], (ROWS + 2) * (COLS + 2) * sizeof(bool));
+        cudaMallocManaged(&out_buff, (ROWS + 2) * sizeof(bool*));
+        cudaMallocManaged(&out_buff[0], (ROWS + 2) * (COLS + 2) * sizeof(bool));
     default:
         break;
     }
@@ -245,6 +245,9 @@ int main(int argc, char* argv[])
     case 1:
         cudaMallocHost((void**)&cgl_grid_next, (ROWS + 2) * sizeof(bool*));
         cudaMallocHost((void**)&cgl_grid_next[0], (ROWS + 2) * (COLS + 2) * sizeof(bool));
+    case 2:
+        cudaMallocManaged(&cgl_grid_next, (ROWS + 2) * sizeof(bool*));
+        cudaMallocManaged(&cgl_grid_next[0], (ROWS + 2) * (COLS + 2) * sizeof(bool));
     default:
         break;
     }
@@ -261,12 +264,14 @@ int main(int argc, char* argv[])
     }
 
     bool *d_cgl_grid, *d_cgl_grid_next;
-    cudaMalloc((void**)&d_cgl_grid, sizeof(bool) * (ROWS + 2) * (COLS + 2));
-    cudaMalloc((void**)&d_cgl_grid_next, sizeof(bool) * (ROWS + 2) * (COLS + 2));
+    if (PROCESS == 0 || PROCESS == 1)
+    {
+        cudaMalloc((void**)&d_cgl_grid, sizeof(bool) * (ROWS + 2) * (COLS + 2));
+        cudaMalloc((void**)&d_cgl_grid_next, sizeof(bool) * (ROWS + 2) * (COLS + 2));
 
-    cudaMemcpy(d_cgl_grid, cgl_grid[0], sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_cgl_grid_next, cgl_grid[0], sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyHostToDevice);
-
+        cudaMemcpy(d_cgl_grid, cgl_grid[0], sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_cgl_grid_next, cgl_grid[0], sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyHostToDevice);
+    }
     // Pass number of rows and cols to GPU
     int *d_ROWS, *d_COLS;
     int rowsWithPadding, colsWithPadding;
@@ -280,13 +285,14 @@ int main(int argc, char* argv[])
     cudaMemcpy(d_COLS, &colsWithPadding, sizeof(int), cudaMemcpyHostToDevice);
 
     dim3 blockSize = ceil(rowsWithPadding * colsWithPadding / NUMBER_OF_THREADS);
-    printf("Blocksize: %d\n", blockSize);
 
     sf::Clock Clock;
     Clock.restart();
 
     int generation_counter = 0;
     int Time = 0;
+    int swap = 0;
+    bool** display_buffer = cgl_grid_next;
     // run the program as long as the window is open
     while (window.isOpen())
     {
@@ -318,29 +324,28 @@ int main(int argc, char* argv[])
         }
 
         Clock.restart();
-        vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(d_cgl_grid, d_cgl_grid_next, d_ROWS, d_COLS);
-        cudaMemcpy(cgl_grid_next[0], d_cgl_grid_next, sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyDeviceToHost);
-        cudaMemcpy(d_cgl_grid, cgl_grid_next[0], sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyHostToDevice);
+        if (PROCESS == 0 || PROCESS == 1)
+        {
+            vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(d_cgl_grid, d_cgl_grid_next, d_ROWS, d_COLS);
+            cudaDeviceSynchronize();
+            cudaMemcpy(cgl_grid_next[0], d_cgl_grid_next, sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyDeviceToHost);
+            cudaMemcpy(d_cgl_grid, cgl_grid_next[0], sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyHostToDevice);
+        }
+        if (PROCESS == 2)
+        {
+            if (!(swap % 2))
+            {
+                vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(cgl_grid[0], cgl_grid_next[0], d_ROWS, d_COLS);
+                display_buffer = cgl_grid_next;
+            }
+            else
+            {
+                vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(cgl_grid_next[0], cgl_grid[0], d_ROWS, d_COLS);
+                display_buffer = cgl_grid;
+            }
+            cudaDeviceSynchronize();
+        }
 
-        // switch (PROCESS)
-        // {
-        // case 0:
-        //     SEQ_Process(&cgl_grid, &cgl_grid_next);
-        //     break;
-        
-        // case 1:
-        //     // THRD Process
-        //     THRD_Process(&cgl_grid, &cgl_grid_next, NUMBER_OF_THREADS, &quotas);
-        //     break;
-
-        // case 2:
-        //     // OMP Process
-        //     OMP_Process(&cgl_grid, &cgl_grid_next, NUMBER_OF_THREADS);
-        //     break;
-        
-        // default:
-        //     break;
-        // }
         Time += Clock.getElapsedTime().asMicroseconds();
         generation_counter++;
 
@@ -350,10 +355,12 @@ int main(int argc, char* argv[])
         {
             for (int i_col = 1; i_col < COLS-1; i_col++)
             {
-                if (cgl_grid_next[i_row][i_col])
+                if (display_buffer[i_row][i_col])
                     window.draw(cells[i_row-1][i_col-1]);
             }
         }
+        swap++;
+        // sleep(1);
 
         // end the current frame
         window.display();
@@ -368,7 +375,10 @@ int main(int argc, char* argv[])
         cudaFree(cgl_grid);
         cudaFree(cgl_grid_next);
         break;
-    
+    case 2:
+        cudaFree(cgl_grid);
+        cudaFree(cgl_grid_next);
+        break;
     default:
         break;
     }
