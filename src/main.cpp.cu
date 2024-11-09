@@ -19,7 +19,7 @@ on the input parameters.
 int WINDOW_WIDTH = 800;
 int WINDOW_HEIGHT = 600;
 int CELL_SIZE = 5;
-int PROCESS = 1; // 0 : NORMAL; 1 : PINNED; 2 : MANAGED
+int PROCESS = 0; // 0 : NORMAL; 1 : PINNED; 2 : MANAGED
 int NUMBER_OF_THREADS = 8;
 int ROWS, COLS;
 
@@ -33,28 +33,29 @@ struct Report
     std::string processName;
 };
 
-__global__ void vector_add(bool* input, bool* output, int* rows, int* cols)
+__global__ void gameOfLifeEngine(bool* input, bool* output, int* rows, int* cols)
 {
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    int r = tid / *cols;
-    int c = tid % *cols;
+    // Each thread gets one cell to compute
+    int tid = blockIdx.x * blockDim.x + threadIdx.x; // thread ID
+    int r = tid / *cols; // current row idx
+    int c = tid % *cols; // current column idx
 
-    int cc = r * (*cols) + c;
+    int cc = r * (*cols) + c; // 2D to 1D idx translation
 
     int tl_r, tm_r, tr_r, ml_r, mr_r, bl_r, bm_r, br_r;
     int tl_c, tm_c, tr_c, ml_c, mr_c, bl_c, bm_c, br_c;
     int tl, tm, tr, ml, mr, bl, bm, br;
 
-    tl_r = r - 1; 
-    tm_r = r - 1;
-    tr_r = r - 1;
-    ml_r = r;
-    mr_r = r;
-    bl_r = r + 1;
-    bm_r = r + 1;
-    br_r = r + 1;
+    tl_r = r - 1; // top left row idx
+    tm_r = r - 1; // top middle row idx
+    tr_r = r - 1; // top right row idx
+    ml_r = r;     // middle left row idx
+    mr_r = r;     // middle RIGHT row idx
+    bl_r = r + 1; // bottom left row idx
+    bm_r = r + 1; // bottom middle row idx 
+    br_r = r + 1; // bottom right row idx
 
-    tl_c = c - 1; 
+    tl_c = c - 1; // same order as above but for columns
     tm_c = c;
     tr_c = c + 1;
     ml_c = c - 1;
@@ -63,7 +64,7 @@ __global__ void vector_add(bool* input, bool* output, int* rows, int* cols)
     bm_c = c;
     br_c = c + 1;
 
-    tl = input[tl_r * (*cols) + tl_c];
+    tl = input[tl_r * (*cols) + tl_c]; // corresponding cell value after 2D to 1D idx transposing
     tm = input[tm_r * (*cols) + tm_c];
     tr = input[tr_r * (*cols) + tr_c];
     ml = input[ml_r * (*cols) + ml_c];
@@ -99,6 +100,7 @@ int main(int argc, char* argv[])
 {
     rng.seed(time(NULL));
     for (int i=0; i< argc; i++)
+    // process input args
     {
         std::string arg = argv[i];
 
@@ -189,6 +191,7 @@ int main(int argc, char* argv[])
         cells.push_back(cells_row);
     }
 
+    // Buffer 1 (Active)
     bool** cgl_grid, **out_buff;
     switch (PROCESS)
     {
@@ -231,6 +234,7 @@ int main(int argc, char* argv[])
         cgl_grid[i][COLS+1] = 0;
     }
 
+    // Buffer 2 (Active)
     bool** cgl_grid_next;
     switch (PROCESS)
     {
@@ -325,7 +329,7 @@ int main(int argc, char* argv[])
         {
             if (PROCESS == 0 || PROCESS == 1)
             {
-                vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(d_cgl_grid, d_cgl_grid_next, d_ROWS, d_COLS);
+                gameOfLifeEngine<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(d_cgl_grid, d_cgl_grid_next, d_ROWS, d_COLS);
                 cudaDeviceSynchronize();
                 cudaMemcpy(cgl_grid_next[0], d_cgl_grid_next, sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyDeviceToHost);
                 display_buffer = cgl_grid_next;
@@ -333,7 +337,7 @@ int main(int argc, char* argv[])
             
             if (PROCESS == 2)
             {
-                vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(cgl_grid[0], cgl_grid_next[0], d_ROWS, d_COLS);
+                gameOfLifeEngine<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(cgl_grid[0], cgl_grid_next[0], d_ROWS, d_COLS);
                 display_buffer = cgl_grid_next;
                 cudaDeviceSynchronize();
             }
@@ -342,14 +346,14 @@ int main(int argc, char* argv[])
         {
             if (PROCESS == 0 || PROCESS == 1)
             {
-                vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(d_cgl_grid_next, d_cgl_grid, d_ROWS, d_COLS);
+                gameOfLifeEngine<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(d_cgl_grid_next, d_cgl_grid, d_ROWS, d_COLS);
                 cudaDeviceSynchronize();
                 cudaMemcpy(cgl_grid[0], d_cgl_grid, sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyDeviceToHost);
                 display_buffer = cgl_grid;
             }
             if (PROCESS == 2)
             {
-                vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(cgl_grid_next[0], cgl_grid[0], d_ROWS, d_COLS);
+                gameOfLifeEngine<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(cgl_grid_next[0], cgl_grid[0], d_ROWS, d_COLS);
                 display_buffer = cgl_grid;
             }
         }
