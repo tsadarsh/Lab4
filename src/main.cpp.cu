@@ -23,7 +23,7 @@ on the input parameters.
 int WINDOW_WIDTH = 800;
 int WINDOW_HEIGHT = 600;
 int CELL_SIZE = 5;
-int PROCESS = 1; // 0 : SEQ; 1 : THRD; 2 : OMP
+int PROCESS = 1; // 0 : NORMAL; 1 : PINNED; 2 : MANAGED
 int NUMBER_OF_THREADS = 8;
 int ROWS, COLS;
 
@@ -152,17 +152,17 @@ int main(int argc, char* argv[])
     {
     case 0:
         performance.threadCount = 1;
-        performance.processName = " sequential thread ";
+        performance.processName = " NORMAL ";
         break;
     
     case 1:
         performance.threadCount = NUMBER_OF_THREADS;
-        performance.processName = " std::threads ";
+        performance.processName = " PINNED ";
         break;
     
     case 2:
         performance.threadCount = NUMBER_OF_THREADS;
-        performance.processName = " OMP threads ";
+        performance.processName = " MANAGED ";
         break;
     
     default:
@@ -324,27 +324,39 @@ int main(int argc, char* argv[])
         }
 
         Clock.restart();
-        if (PROCESS == 0 || PROCESS == 1)
+        if (!(swap % 2))
         {
-            vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(d_cgl_grid, d_cgl_grid_next, d_ROWS, d_COLS);
-            cudaDeviceSynchronize();
-            cudaMemcpy(cgl_grid_next[0], d_cgl_grid_next, sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyDeviceToHost);
-            cudaMemcpy(d_cgl_grid, cgl_grid_next[0], sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyHostToDevice);
-        }
-        if (PROCESS == 2)
-        {
-            if (!(swap % 2))
+            if (PROCESS == 0 || PROCESS == 1)
+            {
+                vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(d_cgl_grid, d_cgl_grid_next, d_ROWS, d_COLS);
+                cudaDeviceSynchronize();
+                cudaMemcpy(cgl_grid_next[0], d_cgl_grid_next, sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyDeviceToHost);
+                display_buffer = cgl_grid_next;
+            }
+            
+            if (PROCESS == 2)
             {
                 vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(cgl_grid[0], cgl_grid_next[0], d_ROWS, d_COLS);
                 display_buffer = cgl_grid_next;
+                cudaDeviceSynchronize();
             }
-            else
+        }
+        else
+        {
+            if (PROCESS == 0 || PROCESS == 1)
+            {
+                vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(d_cgl_grid_next, d_cgl_grid, d_ROWS, d_COLS);
+                cudaDeviceSynchronize();
+                cudaMemcpy(cgl_grid[0], d_cgl_grid, sizeof(bool) * (ROWS + 2) * (COLS + 2), cudaMemcpyDeviceToHost);
+                display_buffer = cgl_grid;
+            }
+            if (PROCESS == 2)
             {
                 vector_add<<<blockSize, (dim3)NUMBER_OF_THREADS>>>(cgl_grid_next[0], cgl_grid[0], d_ROWS, d_COLS);
                 display_buffer = cgl_grid;
             }
-            cudaDeviceSynchronize();
         }
+
 
         Time += Clock.getElapsedTime().asMicroseconds();
         generation_counter++;
