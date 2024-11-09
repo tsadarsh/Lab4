@@ -199,8 +199,8 @@ int main(int argc, char* argv[])
     // std::vector<std::vector<int>> cgl_grid;
     // std::vector<std::vector<int>> cgl_grid_next;
 
-    bool** cgl_grid = new bool*[ROWS+2];
-    cgl_grid[0] = new bool[(ROWS + 2) * (COLS + 2)];
+    bool** cgl_grid = (bool**)malloc((ROWS + 2) * sizeof(bool*));
+    cgl_grid[0] = (bool*)malloc((ROWS + 2) * (COLS + 2) * sizeof(bool));
     for (int i = 1; i < ROWS + 2; i++) 
     {
         cgl_grid[i] = cgl_grid[i - 1] + (COLS + 2);
@@ -224,8 +224,8 @@ int main(int argc, char* argv[])
     }
 
 
-    bool** cgl_grid_next = new bool*[ROWS+2];
-    cgl_grid_next[0] = new bool[(ROWS + 2) * (COLS + 2)];
+    bool** cgl_grid_next = (bool**)malloc((ROWS + 2) * sizeof(bool*));
+    cgl_grid_next[0] = (bool*)malloc((ROWS + 2) * (COLS + 2) * sizeof(bool));
     for (int i = 1; i < ROWS + 2; i++) 
     {
         cgl_grid_next[i] = cgl_grid_next[i - 1] + (COLS + 2);
