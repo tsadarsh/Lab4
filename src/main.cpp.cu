@@ -133,17 +133,17 @@ int main(int argc, char* argv[])
         {
             if (i+1 < argc)
             {
-                if (std::string(argv[i+1]) == "THRD")
+                if (std::string(argv[i+1]) == "PINNED")
                 {
                     PROCESS = 1;
                 }
-                else if (std::string(argv[i+1]) == "OMP")
+                else if (std::string(argv[i+1]) == "MANAGED")
                 {
                     PROCESS = 2;
                 }
                 else
                 {
-                    PROCESS = 0; // SEQ
+                    PROCESS = 0; // NORMAL
                 }
             }
         }
@@ -199,8 +199,20 @@ int main(int argc, char* argv[])
     // std::vector<std::vector<int>> cgl_grid;
     // std::vector<std::vector<int>> cgl_grid_next;
 
-    bool** cgl_grid = (bool**)malloc((ROWS + 2) * sizeof(bool*));
-    cgl_grid[0] = (bool*)malloc((ROWS + 2) * (COLS + 2) * sizeof(bool));
+    bool** cgl_grid;
+    switch (PROCESS)
+    {
+    case 0:
+        cgl_grid = (bool**)malloc((ROWS + 2) * sizeof(bool*));
+        cgl_grid[0] = (bool*)malloc((ROWS + 2) * (COLS + 2) * sizeof(bool));
+        break;
+    case 1:
+        cudaMallocHost((void**)&cgl_grid, (ROWS + 2) * sizeof(bool*));
+        cudaMallocHost((void**)&cgl_grid[0], (ROWS + 2) * (COLS + 2) * sizeof(bool));
+    default:
+        break;
+    }
+    
     for (int i = 1; i < ROWS + 2; i++) 
     {
         cgl_grid[i] = cgl_grid[i - 1] + (COLS + 2);
@@ -223,9 +235,19 @@ int main(int argc, char* argv[])
         cgl_grid[i][COLS+1] = 0;
     }
 
-
-    bool** cgl_grid_next = (bool**)malloc((ROWS + 2) * sizeof(bool*));
-    cgl_grid_next[0] = (bool*)malloc((ROWS + 2) * (COLS + 2) * sizeof(bool));
+    bool** cgl_grid_next;
+    switch (PROCESS)
+    {
+    case 0:
+        cgl_grid_next = (bool**)malloc((ROWS + 2) * sizeof(bool*));
+        cgl_grid_next[0] = (bool*)malloc((ROWS + 2) * (COLS + 2) * sizeof(bool));
+        break;
+    case 1:
+        cudaMallocHost((void**)&cgl_grid_next, (ROWS + 2) * sizeof(bool*));
+        cudaMallocHost((void**)&cgl_grid_next[0], (ROWS + 2) * (COLS + 2) * sizeof(bool));
+    default:
+        break;
+    }
     for (int i = 1; i < ROWS + 2; i++) 
     {
         cgl_grid_next[i] = cgl_grid_next[i - 1] + (COLS + 2);
@@ -335,6 +357,20 @@ int main(int argc, char* argv[])
 
         // end the current frame
         window.display();
+    }
+    switch (PROCESS)
+    {
+    case 0:
+        free(cgl_grid);
+        free(cgl_grid_next);
+        break;
+    case 1:
+        cudaFree(cgl_grid);
+        cudaFree(cgl_grid_next);
+        break;
+    
+    default:
+        break;
     }
 
     return 0;
