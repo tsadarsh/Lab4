@@ -1,7 +1,7 @@
 /*
 Author: Adarsh Thirugnanasambandam Sriuma
 Class: ECE6122 (A)
-Last Date Modified: Oct 7, 2024
+Last Date Modified: Nov 11, 2024
 
 Description:
 
@@ -13,12 +13,8 @@ on the input parameters.
 #include <SFML/Graphics.hpp>
 #include <iostream>
 #include <random>
-#include "sequentialLogic.cpp"
-#include "threadingLogic.cpp"
-#include "OMPLogic.cpp"
 #include <cuda.h>
 #include <cuda_runtime.h>
-#include<unistd.h>
 
 int WINDOW_WIDTH = 800;
 int WINDOW_HEIGHT = 600;
