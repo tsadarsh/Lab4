@@ -277,7 +277,7 @@ int main(int argc, char* argv[])
     int rowsWithPadding, colsWithPadding;
     rowsWithPadding = ROWS + 2;
     colsWithPadding = COLS + 2;
-    printf("Rowswp: %d, Colswp: %d\n", rowsWithPadding, colsWithPadding);
+    //printf("Rowswp: %d, Colswp: %d\n", rowsWithPadding, colsWithPadding);
 
     cudaMalloc((void**)&d_ROWS, sizeof(int));
     cudaMalloc((void**)&d_COLS, sizeof(int));
@@ -318,8 +318,9 @@ int main(int argc, char* argv[])
         if(generation_counter == 100)
         {
             generation_counter = 0;
-            std::cout << "100 generations took " << Time << " microseconds " \
-                << "with "<< performance.threadCount << performance.processName << std::endl;
+            std::cout << "100 generations took " << Time << " microsecs " \
+                << "with "<< performance.threadCount << " threads per block using " \
+                << performance.processName << " memory allocation." << std::endl;
             Time = 0;
         }
 
